@@ -1,0 +1,44 @@
+# dependencies
+node_modules
+.next
+out
+build
+coverage
+
+# env files
+.env*
+
+# git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+
+# debug logs
+*.log
+npm-debug.log*
+
+# docker
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# misc
+.DS_Store
+*.pem
+tsconfig.tsbuildinfo
+next-env.d.ts
+
+# prisma generated
+src/generated/prisma
+
+# storage
+storage/uploads
+
+# agents/skills (dev only)
+.agents
+.claude
+.windsurf

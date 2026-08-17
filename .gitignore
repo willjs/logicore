@@ -44,3 +44,9 @@ next-env.d.ts
 
 # uploads
 /storage/uploads
+
+# logs
+*.log
+
+# temp
+update-logo.ts
