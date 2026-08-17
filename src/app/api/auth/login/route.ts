@@ -9,6 +9,7 @@ import { loginSchema } from "@/lib/validations";
 import { fail, ok } from "@/lib/api";
 import { auditLog } from "@/lib/audit";
 import { serialize } from "@/lib/serialize";
+import { isLocked, recordFailure, clearFailures } from "@/lib/brute-force";
 
 const SESSION_MAX_AGE = 60 * 60 * 12;
 
@@ -26,15 +27,23 @@ export async function POST(req: Request) {
 
     const { email, password } = parsed.data;
 
+    if (isLocked(email)) {
+      return fail("Cuenta bloqueada temporalmente. Intente de nuevo en 15 minutos.", 429, "ACCOUNT_LOCKED");
+    }
+
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user || !user.active) {
+      recordFailure(email);
       return fail("Credenciales inválidas", 401, "INVALID_CREDENTIALS");
     }
 
     const validPassword = await bcrypt.compare(password, user.passwordHash);
     if (!validPassword) {
+      recordFailure(email);
       return fail("Credenciales inválidas", 401, "INVALID_CREDENTIALS");
     }
+
+    clearFailures(email);
 
     const token = await signToken({
       sub: String(user.id),
