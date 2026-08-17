@@ -50,3 +50,6 @@ next-env.d.ts
 
 # temp
 update-logo.ts
+
+# deploy notes
+DEPLOY.md
