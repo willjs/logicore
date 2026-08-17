@@ -38,7 +38,6 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/src/generated ./src/generated
 COPY --from=deps /app/prisma ./prisma
-COPY --from=builder /app/src ./src
 COPY --from=prod-deps /app/node_modules ./node_modules
 
 RUN mkdir -p /app/storage/uploads
