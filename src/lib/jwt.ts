@@ -1,9 +1,11 @@
 import { SignJWT, jwtVerify } from "jose";
 import type { JWTPayload } from "jose";
 
-const secret = new TextEncoder().encode(
-  process.env.JWT_SECRET ?? "erpbod-dev-secret",
-);
+const raw = process.env.JWT_SECRET;
+if (!raw && process.env.NODE_ENV === "production") {
+  throw new Error("JWT_SECRET is required in production");
+}
+const secret = new TextEncoder().encode(raw ?? "erpbod-dev-secret");
 
 export interface TokenPayload {
   sub: string;
