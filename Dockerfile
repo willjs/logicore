@@ -41,7 +41,7 @@ COPY --from=deps /app/prisma ./prisma
 COPY --from=prod-deps /app/node_modules ./node_modules
 
 RUN mkdir -p /app/storage/uploads
-RUN chown -R nextjs:nodejs /app/storage
+RUN chown -R nextjs:nodejs /app/storage /app/node_modules
 
 USER nextjs
 
