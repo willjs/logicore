@@ -33,13 +33,8 @@ COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/src/generated ./src/generated
 COPY --from=deps /app/prisma ./prisma
 
-RUN npm install -g prisma@7.9.1 dotenv
-
 RUN mkdir -p /app/storage/uploads
 RUN chown -R nextjs:nodejs /app/storage
-
-COPY docker-entrypoint.sh /app/docker-entrypoint.sh
-RUN chmod +x /app/docker-entrypoint.sh
 
 USER nextjs
 
@@ -47,4 +42,4 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-ENTRYPOINT ["/app/docker-entrypoint.sh"]
+CMD ["node", "server.js"]
