@@ -32,7 +32,6 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/src/generated ./src/generated
 COPY --from=deps /app/prisma ./prisma
-COPY --from=deps /app/prisma.config.ts ./prisma.config.ts
 
 RUN npm install -g prisma@7.9.1 dotenv
 
