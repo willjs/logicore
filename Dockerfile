@@ -33,11 +33,8 @@ COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/src/generated ./src/generated
 COPY --from=deps /app/prisma ./prisma
 COPY --from=deps /app/prisma.config.ts ./prisma.config.ts
-COPY --from=deps /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=deps /app/node_modules/prisma ./node_modules/prisma
 COPY --from=deps /app/node_modules/dotenv ./node_modules/dotenv
-COPY --from=deps /app/node_modules/@prisma ./node_modules/@prisma
-COPY --from=deps /app/node_modules/.package-lock.json ./node_modules/.package-lock.json
 
 RUN mkdir -p /app/storage/uploads
 RUN chown -R nextjs:nodejs /app/storage
