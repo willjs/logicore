@@ -1,0 +1,564 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum PaymentStatus {
+  PAGADO
+  ABONO
+  PENDIENTE
+}
+
+enum PaymentMethod {
+  EFECTIVO
+  TRANSFERENCIA
+}
+
+enum PaymentKind {
+  PAGO
+  ABONO
+}
+
+enum AttachmentEntity {
+  CUSTOMER
+  SALE
+  PAYMENT
+}
+
+enum AttachmentKind {
+  FOTO
+  DOCUMENTO
+  EVIDENCIA
+  FIRMA
+}
+
+enum MovementType {
+  ENTRADA
+  SALIDA
+  VENTA
+  TRASLADO
+  REINTEGRO
+  AJUSTE
+}
+
+enum MovementRef {
+  SALE
+  TRANSFER
+  RETURN
+  ADJUSTMENT
+  ENTRY
+  EXIT
+}
+
+enum LocationType {
+  WAREHOUSE
+  TRUCK
+}
+
+enum TransferStatus {
+  SIN_REINTEGRO
+  PARCIAL
+  REINTEGRADO
+}
+
+// ---------------------------------------------------------------------------
+// Tenant / Acceso
+// ---------------------------------------------------------------------------
+
+model Company {
+  id        Int      @id @default(autoincrement())
+  name      String
+  nit       String?
+  address   String?
+  phone     String?
+  email     String?
+  logo      String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userCompanies        UserCompany[]
+  roles                Role[]
+  branches             Branch[]
+  customers            Customer[]
+  brands               Brand[]
+  categories           Category[]
+  products             Product[]
+  warehouses           Warehouse[]
+  trucks               Truck[]
+  sales                Sale[]
+  payments             Payment[]
+  transfers            Transfer[]
+  returns              TruckReturn[]
+  movements            StockMovement[]
+  auditLogs            AuditLog[]
+  attachments          Attachment[]
+
+  @@map("companies")
+}
+
+model User {
+  id           Int      @id @default(autoincrement())
+  name         String
+  email        String   @unique
+  passwordHash String
+  superadmin   Boolean  @default(false)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  companies  UserCompany[]
+  sales      Sale[]
+  payments   Payment[]
+  transfers  Transfer[]
+  returns    TruckReturn[]
+  movements  StockMovement[]
+  auditLogs  AuditLog[]
+  trucks     Truck[]
+
+  @@map("users")
+}
+
+model Role {
+  id          Int      @id @default(autoincrement())
+  companyId   Int
+  name        String
+  description String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company        Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  permissions    RolePermission[]
+  userCompanies  UserCompany[]
+
+  @@unique([companyId, name])
+  @@map("roles")
+}
+
+model Permission {
+  id          Int      @id @default(autoincrement())
+  code        String   @unique
+  module      String
+  description String?
+
+  roles RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       Int
+  permissionId Int
+  createdAt    DateTime @default(now())
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model UserCompany {
+  userId    Int
+  companyId Int
+  roleId    Int
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  role    Role    @relation(fields: [roleId], references: [id])
+
+  @@id([userId, companyId])
+  @@map("user_companies")
+}
+
+// ---------------------------------------------------------------------------
+// Catálogos
+// ---------------------------------------------------------------------------
+
+model Customer {
+  id                 Int      @id @default(autoincrement())
+  companyId          Int
+  name               String
+  lastname           String?
+  identificationType String   @default("CC")
+  identification     String
+  address            String?
+  phone              String?
+  email              String?
+  active             Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  company     Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sales       Sale[]
+  payments    Payment[]
+
+  @@unique([companyId, identification])
+  @@index([companyId, name])
+  @@map("customers")
+}
+
+model Brand {
+  id        Int      @id @default(autoincrement())
+  companyId Int
+  name      String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  products Product[]
+
+  @@unique([companyId, name])
+  @@map("brands")
+}
+
+model Category {
+  id        Int      @id @default(autoincrement())
+  companyId Int
+  name      String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  products Product[]
+
+  @@unique([companyId, name])
+  @@map("categories")
+}
+
+model Product {
+  id          Int      @id @default(autoincrement())
+  companyId   Int
+  brandId     Int?
+  categoryId  Int?
+  name        String
+  description String?
+  serial      String?
+  salePrice   Decimal  @db.Decimal(14, 2) @default(0)
+  state       String   @default("ACTIVO")
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company            Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  brand              Brand?             @relation(fields: [brandId], references: [id])
+  category           Category?          @relation(fields: [categoryId], references: [id])
+  warehouseInventory WarehouseInventory[]
+  truckInventory     TruckInventory[]
+  saleItems          SaleItem[]
+  transferItems      TransferItem[]
+  returnItems        TruckReturnItem[]
+  movements          StockMovement[]
+
+  @@index([companyId, name])
+  @@index([companyId, serial])
+  @@map("products")
+}
+
+// ---------------------------------------------------------------------------
+// Sedes
+// ---------------------------------------------------------------------------
+
+model Branch {
+  id        Int      @id @default(autoincrement())
+  companyId Int
+  name      String
+  address   String?
+  phone     String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company   Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  warehouses Warehouse[]
+
+  @@unique([companyId, name])
+  @@map("branches")
+}
+
+// ---------------------------------------------------------------------------
+// Bodegas, camiones e inventario
+// ---------------------------------------------------------------------------
+
+model Warehouse {
+  id        Int      @id @default(autoincrement())
+  companyId Int
+  branchId  Int?
+  name      String
+  location  String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company   Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  branch    Branch?             @relation(fields: [branchId], references: [id])
+  inventory WarehouseInventory[]
+  transfers Transfer[]
+  returns   TruckReturn[]
+
+  @@unique([companyId, name])
+  @@map("warehouses")
+}
+
+model Truck {
+  id        Int      @id @default(autoincrement())
+  companyId Int
+  name      String
+  plate     String?
+  driverId  Int?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company   Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  driver    User?             @relation(fields: [driverId], references: [id])
+  inventory TruckInventory[]
+  sales     Sale[]
+  transfers Transfer[]
+  returns   TruckReturn[]
+
+  @@unique([companyId, name])
+  @@map("trucks")
+}
+
+model WarehouseInventory {
+  id          Int @id @default(autoincrement())
+  warehouseId Int
+  productId   Int
+  quantity    Int @default(0)
+
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([warehouseId, productId])
+  @@map("warehouse_inventory")
+}
+
+model TruckInventory {
+  id        Int @id @default(autoincrement())
+  truckId   Int
+  productId Int
+  quantity  Int @default(0)
+
+  truck   Truck   @relation(fields: [truckId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([truckId, productId])
+  @@map("truck_inventory")
+}
+
+// ---------------------------------------------------------------------------
+// Ventas y pagos
+// ---------------------------------------------------------------------------
+
+model Sale {
+  id            Int            @id @default(autoincrement())
+  companyId     Int
+  customerId    Int
+  truckId       Int?
+  userId        Int
+  saleNumber    String
+  saleDate      DateTime       @default(now())
+  subtotal      Decimal        @db.Decimal(14, 2)
+  total         Decimal        @db.Decimal(14, 2)
+  status        PaymentStatus  @default(PENDIENTE)
+  paymentMethod PaymentMethod?
+  notes         String?
+  createdAt     DateTime       @default(now())
+
+  company     Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer    Customer    @relation(fields: [customerId], references: [id])
+  truck       Truck?      @relation(fields: [truckId], references: [id])
+  user        User        @relation(fields: [userId], references: [id])
+  items       SaleItem[]
+  payments    Payment[]
+
+  @@unique([companyId, saleNumber])
+  @@index([companyId, customerId])
+  @@map("sales")
+}
+
+model SaleItem {
+  id        Int     @id @default(autoincrement())
+  saleId    Int
+  productId Int
+  quantity  Int
+  unitPrice Decimal @db.Decimal(14, 2)
+  lineTotal Decimal @db.Decimal(14, 2)
+
+  sale    Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@map("sale_items")
+}
+
+model Payment {
+  id          Int            @id @default(autoincrement())
+  companyId   Int
+  saleId      Int
+  customerId  Int
+  userId      Int
+  amount      Decimal        @db.Decimal(14, 2)
+  method      PaymentMethod
+  kind        PaymentKind    @default(PAGO)
+  received    Decimal?       @db.Decimal(14, 2)
+  change      Decimal?       @db.Decimal(14, 2)
+  notes       String?
+  paymentDate DateTime       @default(now())
+  createdAt   DateTime       @default(now())
+
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sale     Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id])
+  user     User     @relation(fields: [userId], references: [id])
+
+  @@index([companyId, customerId])
+  @@map("payments")
+}
+
+// ---------------------------------------------------------------------------
+// Traslados y reintegros
+// ---------------------------------------------------------------------------
+
+model Transfer {
+  id           Int            @id @default(autoincrement())
+  companyId    Int
+  warehouseId  Int
+  truckId      Int
+  userId       Int
+  status       TransferStatus @default(SIN_REINTEGRO)
+  notes        String?
+  transferDate DateTime       @default(now())
+  createdAt    DateTime       @default(now())
+
+  company   Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  warehouse Warehouse        @relation(fields: [warehouseId], references: [id])
+  truck     Truck            @relation(fields: [truckId], references: [id])
+  user      User             @relation(fields: [userId], references: [id])
+  items     TransferItem[]
+  returns   TruckReturn[]
+
+  @@map("transfers")
+}
+
+model TransferItem {
+  id               Int @id @default(autoincrement())
+  transferId       Int
+  productId        Int
+  quantity         Int
+  returnedQuantity Int @default(0)
+
+  transfer Transfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [productId], references: [id])
+
+  @@unique([transferId, productId])
+  @@map("transfer_items")
+}
+
+model TruckReturn {
+  id          Int      @id @default(autoincrement())
+  companyId   Int
+  transferId  Int
+  warehouseId Int
+  truckId     Int
+  userId      Int
+  notes       String?
+  returnDate  DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  company   Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  transfer  Transfer          @relation(fields: [transferId], references: [id])
+  warehouse Warehouse         @relation(fields: [warehouseId], references: [id])
+  truck     Truck             @relation(fields: [truckId], references: [id])
+  user      User              @relation(fields: [userId], references: [id])
+  items     TruckReturnItem[]
+
+  @@map("returns")
+}
+
+model TruckReturnItem {
+  id        Int @id @default(autoincrement())
+  returnId  Int
+  productId Int
+  quantity  Int
+
+  truckReturn TruckReturn @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  product     Product     @relation(fields: [productId], references: [id])
+
+  @@map("return_items")
+}
+
+// ---------------------------------------------------------------------------
+// Movimientos, archivos y auditoría
+// ---------------------------------------------------------------------------
+
+model StockMovement {
+  id              Int          @id @default(autoincrement())
+  companyId       Int
+  userId          Int
+  productId       Int
+  type            MovementType
+  quantity        Int
+  originType      LocationType?
+  originId        Int?
+  destinationType LocationType?
+  destinationId   Int?
+  referenceType   MovementRef?
+  referenceId     Int?
+  description     String?
+  createdAt       DateTime     @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([companyId, type, createdAt])
+  @@index([productId])
+  @@map("stock_movements")
+}
+
+model Attachment {
+  id           Int              @id @default(autoincrement())
+  companyId    Int
+  entityType   AttachmentEntity
+  entityId     Int
+  kind         AttachmentKind
+  originalName String
+  path         String
+  mimeType     String
+  size         Int
+  createdAt    DateTime         @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([entityType, entityId])
+  @@map("attachments")
+}
+
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  companyId Int
+  userId    Int
+  action    String
+  entity    String
+  entityId  Int?
+  details   Json?
+  createdAt DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@index([companyId, createdAt])
+  @@map("audit_logs")
+}
