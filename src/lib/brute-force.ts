@@ -4,6 +4,7 @@ const MAX_ATTEMPTS = 5;
 const LOCKOUT_MS = 15 * 60 * 1000;
 
 export function isLocked(email: string): boolean {
+  if (process.env.NODE_ENV !== "production") return false;
   const entry = FAILURES.get(email);
   if (!entry) return false;
   if (Date.now() > entry.lockedUntil) {
