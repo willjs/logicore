@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Camera, ExternalLink, FileText, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { Camera, ExternalLink, FileText, Pencil, Plus, Search, Trash2, ScanLine } from "lucide-react";
 import { toast } from "sonner";
 
 import { apiFetch } from "@/lib/client/api";
@@ -150,6 +150,7 @@ export function CustomerFormDialog({
   const [pendingDocs, setPendingDocs] = useState<File[]>([]);
   const [removedDocs, setRemovedDocs] = useState<number[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (open && customer) {
@@ -190,6 +191,21 @@ export function CustomerFormDialog({
       return;
     }
     setPendingDocs((prev) => [...prev, file]);
+  }
+
+  function onCameraCapture(file: File | undefined) {
+    if (!file) return;
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      toast.error("Formato no permitido (JPG, PNG o WebP)");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("La imagen no puede superar 10 MB");
+      return;
+    }
+    const renamed = new File([file], `cedula-${Date.now()}.${file.type.split("/")[1]}`, { type: file.type });
+    setPendingDocs((prev) => [...prev, renamed]);
+    toast.success("Foto de cédula adjunta");
   }
 
   async function uploadPhoto(customerId: number) {
@@ -449,6 +465,29 @@ export function CustomerFormDialog({
                 event.target.value = "";
               }}
             />
+            <div className="flex items-center gap-2">
+              <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                capture="environment"
+                className="hidden"
+                onChange={(event) => {
+                  onCameraCapture(event.target.files?.[0]);
+                  event.target.value = "";
+                }}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={() => cameraInputRef.current?.click()}
+              >
+                <ScanLine className="mr-2 size-4" />
+                Tomar foto de cédula
+              </Button>
+            </div>
             <p className="text-xs text-muted-foreground">
               JPG, PNG, WebP o PDF · máx. 10 MB por archivo
             </p>
