@@ -221,8 +221,9 @@ function PaymentDialog({
     }
     setFormError(null);
     setSubmitting(true);
+    let result: { payments: CreatedPayment[] };
     try {
-      const result = await apiFetch<{ payments: CreatedPayment[] }>("/api/payments", {
+      result = await apiFetch<{ payments: CreatedPayment[] }>("/api/payments", {
         method: "POST",
         body: JSON.stringify({
           customerId: customer.id,
@@ -233,33 +234,37 @@ function PaymentDialog({
           notes: notes.trim() || null,
         }),
       });
-
-      for (const payment of result.payments) {
-        if (method === "TRANSFERENCIA" && receiptFile) {
-          const form = new FormData();
-          form.append("file", receiptFile);
-          await apiFetch(
-            `/api/sales/${payment.saleId}/payments/${payment.id}/attachment?kind=EVIDENCIA`,
-            { method: "POST", body: form },
-          );
-        }
-        if (method === "EFECTIVO" && signature) {
-          const file = await dataUrlToFile(signature, "firma.png");
-          const form = new FormData();
-          form.append("file", file);
-          await apiFetch(
-            `/api/sales/${payment.saleId}/payments/${payment.id}/attachment?kind=FIRMA`,
-            { method: "POST", body: form },
-          );
-        }
-      }
-
-      toast.success("Pago registrado");
-      onSuccess();
     } catch (error) {
       setFormError((error as Error).message);
       toast.error((error as Error).message);
       setSubmitting(false);
+      return;
+    }
+
+    toast.success("Pago registrado");
+    onSuccess();
+
+    for (const payment of result.payments) {
+      if (method === "TRANSFERENCIA" && receiptFile) {
+        const form = new FormData();
+        form.append("file", receiptFile);
+        apiFetch(
+          `/api/sales/${payment.saleId}/payments/${payment.id}/attachment?kind=EVIDENCIA`,
+          { method: "POST", body: form },
+        ).catch(() => {});
+      }
+      if (method === "EFECTIVO" && signature) {
+        dataUrlToFile(signature, "firma.png")
+          .then((file) => {
+            const form = new FormData();
+            form.append("file", file);
+            return apiFetch(
+              `/api/sales/${payment.saleId}/payments/${payment.id}/attachment?kind=FIRMA`,
+              { method: "POST", body: form },
+            );
+          })
+          .catch(() => {});
+      }
     }
   }
 

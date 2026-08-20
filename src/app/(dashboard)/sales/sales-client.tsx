@@ -649,6 +649,7 @@ function TruckSaleDialog({
     }
     setFormError(null);
     setSubmitting(true);
+    let sale: { id: number; payments: { id: number }[] };
     try {
       const payload = {
         customerId: selectedCustomer.id,
@@ -662,35 +663,40 @@ function TruckSaleDialog({
           unitPrice: item.unitPrice,
         })),
       };
-      const sale = await apiFetch<{ id: number; payments: { id: number }[] }>("/api/sales", {
+      sale = await apiFetch<{ id: number; payments: { id: number }[] }>("/api/sales", {
         method: "POST",
         body: JSON.stringify(payload),
       });
-      const paymentId = sale.payments?.[0]?.id;
-
-      if (paymentId && paymentMethod === "TRANSFERENCIA" && receiptFile) {
-        const form = new FormData();
-        form.append("file", receiptFile);
-        await apiFetch(
-          `/api/sales/${sale.id}/payments/${paymentId}/attachment?kind=EVIDENCIA`,
-          { method: "POST", body: form },
-        );
-      }
-      if (paymentId && paymentMethod === "EFECTIVO" && signature) {
-        const file = await dataUrlToFile(signature, "firma.png");
-        const form = new FormData();
-        form.append("file", file);
-        await apiFetch(`/api/sales/${sale.id}/payments/${paymentId}/attachment?kind=FIRMA`, {
-          method: "POST",
-          body: form,
-        });
-      }
-      toast.success("Venta registrada");
-      onSuccess();
     } catch (error) {
       toast.error((error as Error).message);
       setFormError((error as Error).message);
       setSubmitting(false);
+      return;
+    }
+
+    toast.success("Venta registrada");
+    onSuccess();
+
+    const paymentId = sale.payments?.[0]?.id;
+    if (paymentId && paymentMethod === "TRANSFERENCIA" && receiptFile) {
+      const form = new FormData();
+      form.append("file", receiptFile);
+      apiFetch(
+        `/api/sales/${sale.id}/payments/${paymentId}/attachment?kind=EVIDENCIA`,
+        { method: "POST", body: form },
+      ).catch(() => {});
+    }
+    if (paymentId && paymentMethod === "EFECTIVO" && signature) {
+      dataUrlToFile(signature, "firma.png")
+        .then((file) => {
+          const form = new FormData();
+          form.append("file", file);
+          return apiFetch(`/api/sales/${sale.id}/payments/${paymentId}/attachment?kind=FIRMA`, {
+            method: "POST",
+            body: form,
+          });
+        })
+        .catch(() => {});
     }
   }
 
