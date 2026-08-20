@@ -128,17 +128,40 @@ async function main() {
     roles[roleDef.name] = role.id;
   }
 
-  console.log("Asignando permisos a roles...");
+  console.log("Sincronizando permisos de roles...");
   for (const roleDef of DEFAULT_ROLES) {
     const roleId = roles[roleDef.name];
-    const existing = await prisma.rolePermission.findMany({ where: { roleId }, select: { permissionId: true } });
-    const existingIds = new Set(existing.map((e) => e.permissionId));
-    const perms = await prisma.permission.findMany({
+    const desiredPerms = await prisma.permission.findMany({
       where: { code: { in: [...roleDef.permissions] } },
     });
-    const toAdd = perms.filter((p) => !existingIds.has(p.id)).map((p) => ({ roleId, permissionId: p.id }));
+    const desiredIds = new Set(desiredPerms.map((p) => p.id));
+
+    const existing = await prisma.rolePermission.findMany({
+      where: { roleId },
+      select: { permissionId: true },
+    });
+    const existingIds = new Set(existing.map((e) => e.permissionId));
+
+    const toAdd = desiredPerms
+      .filter((p) => !existingIds.has(p.id))
+      .map((p) => ({ roleId, permissionId: p.id }));
     if (toAdd.length > 0) {
       await prisma.rolePermission.createMany({ data: toAdd });
+      console.log(`  ${roleDef.name}: +${toAdd.length} permisos agregados`);
+    }
+
+    const toRemoveIds = existing
+      .filter((e) => !desiredIds.has(e.permissionId))
+      .map((e) => e.permissionId);
+    if (toRemoveIds.length > 0) {
+      await prisma.rolePermission.deleteMany({
+        where: { roleId, permissionId: { in: toRemoveIds } },
+      });
+      console.log(`  ${roleDef.name}: -${toRemoveIds.length} permisos removidos`);
+    }
+
+    if (toAdd.length === 0 && toRemoveIds.length === 0) {
+      console.log(`  ${roleDef.name}: OK`);
     }
   }
 
