@@ -42,7 +42,7 @@ export { isGroup };
 export const NAV_ENTRIES: NavEntry[] = [
   { href: "/dashboard", label: "Inicio", icon: LayoutDashboard, permission: "dashboard.view" },
 
-  { href: "/customers", label: "Clientes", icon: Users, permission: "customers.view" },
+  { href: "/customers", label: "Clientes", icon: Users, permission: "customers.edit" },
 
   {
     key: "inventario",
