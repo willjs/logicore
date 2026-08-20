@@ -106,6 +106,7 @@ export async function POST(req: Request) {
     return ok(
       serialize({
         user: { id: user.id, name: user.name, email: user.email },
+        role: firstCompany.role.name,
         companies: activeCompanies.map((c) => ({
           id: c.companyId,
           name: c.company.name,

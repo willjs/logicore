@@ -40,7 +40,7 @@ function isGroup(entry: NavEntry): entry is NavGroup {
 export { isGroup };
 
 export const NAV_ENTRIES: NavEntry[] = [
-  { href: "/dashboard", label: "Inicio", icon: LayoutDashboard, permission: null },
+  { href: "/dashboard", label: "Inicio", icon: LayoutDashboard, permission: "dashboard.view" },
 
   { href: "/customers", label: "Clientes", icon: Users, permission: "customers.view" },
 

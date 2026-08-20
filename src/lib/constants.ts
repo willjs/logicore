@@ -44,6 +44,7 @@ export const PERMISSIONS = [
   { code: "audit.view", module: "Auditoría", description: "Consultar auditoría" },
   { code: "import.run", module: "Importación", description: "Importar información (Excel)" },
   { code: "export.run", module: "Exportación", description: "Exportar información (Excel)" },
+  { code: "dashboard.view", module: "Dashboard", description: "Acceder al panel de inicio" },
 ] as const;
 
 export const PERMISSION_CODES = PERMISSIONS.map((p) => p.code);
@@ -62,6 +63,7 @@ export const DEFAULT_ROLES = [
     name: "SUPERVISOR",
     description: "Controla inventario, traslados y reintegros. Sin información financiera",
     permissions: [
+      "dashboard.view",
       "products.view",
       "products.create",
       "inventory.view",
@@ -87,6 +89,15 @@ export const DEFAULT_ROLES = [
       "products.view",
       "sales.view",
       "sales.create",
+      "payments.view",
+      "payments.create",
+    ] as PermissionCode[],
+  },
+  {
+    name: "COBRADOR",
+    description: "Registra cobros y pagos de clientes",
+    permissions: [
+      "customers.view",
       "payments.view",
       "payments.create",
     ] as PermissionCode[],

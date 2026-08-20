@@ -1,6 +1,7 @@
 import { Building2, KeyRound, ShieldCheck, Users } from "lucide-react";
 
-import { requireSession } from "@/lib/auth";
+import { requireSession, hasPermission } from "@/lib/auth";
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import {
   Card,
@@ -13,6 +14,15 @@ import { Badge } from "@/components/ui/badge";
 
 export default async function DashboardPage() {
   const session = await requireSession();
+
+  if (!hasPermission(session, "dashboard.view")) {
+    if (session.permissions.includes("sales.view")) {
+      redirect("/sales");
+    } else if (session.permissions.includes("payments.view")) {
+      redirect("/payments");
+    }
+    redirect("/login");
+  }
 
   const canSeeUsers = session.permissions.includes("users.view");
   const canSeeRoles = session.permissions.includes("roles.view");

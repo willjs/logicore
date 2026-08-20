@@ -52,7 +52,14 @@ export function LoginForm() {
       } else if (data?.user?.superadmin) {
         router.push("/superadmin");
       } else {
-        router.push("/dashboard");
+        const role = data?.role;
+        if (role === "VENDEDOR") {
+          router.push("/sales");
+        } else if (role === "COBRADOR") {
+          router.push("/payments");
+        } else {
+          router.push("/dashboard");
+        }
       }
       router.refresh();
     } catch {

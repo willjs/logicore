@@ -47,6 +47,7 @@ const PERMISSIONS = [
   { code: "audit.view", module: "Auditoría", description: "Consultar auditoría" },
   { code: "import.run", module: "Importación", description: "Importar información (Excel)" },
   { code: "export.run", module: "Exportación", description: "Exportar información (Excel)" },
+  { code: "dashboard.view", module: "Dashboard", description: "Acceder al panel de inicio" },
 ];
 
 const ALL_PERMISSION_CODES = PERMISSIONS.map((p) => p.code);
@@ -61,6 +62,7 @@ const DEFAULT_ROLES = [
     name: "SUPERVISOR",
     description: "Controla inventario, traslados y reintegros. Sin información financiera",
     permissions: [
+      "dashboard.view",
       "products.view", "products.create", "inventory.view", "inventory.create", "inventory.adjust",
       "warehouses.view", "trucks.view", "transfers.view", "transfers.create",
       "returns.view", "returns.create", "movements.view", "import.run", "export.run",
@@ -72,6 +74,13 @@ const DEFAULT_ROLES = [
     permissions: [
       "customers.view", "customers.create", "products.view",
       "sales.view", "sales.create", "payments.view", "payments.create",
+    ],
+  },
+  {
+    name: "COBRADOR",
+    description: "Registra cobros y pagos de clientes",
+    permissions: [
+      "customers.view", "payments.view", "payments.create",
     ],
   },
 ];
@@ -137,6 +146,7 @@ async function main() {
     { name: "Administrador", email: "admin@erpbod.com", password: "Admin#2026", role: "ADMIN" },
     { name: "Supervisor Demo", email: "supervisor@erpbod.com", password: "Supervisor#2026", role: "SUPERVISOR" },
     { name: "Vendedor Demo", email: "vendedor@erpbod.com", password: "Vendedor#2026", role: "VENDEDOR" },
+    { name: "Cobrador Demo", email: "cobrador@erpbod.com", password: "Cobrador#2026", role: "COBRADOR" },
   ];
 
   console.log("Creando usuarios...");
