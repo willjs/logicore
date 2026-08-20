@@ -35,7 +35,7 @@ export async function proxy(request: NextRequest) {
   const isPublicAuthRoute =
     pathname === "/api/auth/login" || pathname === "/api/auth/logout";
 
-  if (pathname === "/api/auth/login" && request.method === "POST" && process.env.NODE_ENV === "production") {
+  if (pathname === "/api/auth/login" && request.method === "POST" && process.env.NODE_ENV === "production" && process.env.ENABLE_RATE_LIMIT !== "false") {
     const key = getRateLimitKey(request, "login");
     if (!checkRateLimit(key, 5, 15 * 60 * 1000)) {
       return NextResponse.json(
