@@ -7,9 +7,7 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
-  Download,
   FileText,
-  MessageCircle,
   PackageSearch,
   Plus,
   Search,
@@ -19,10 +17,12 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
-import { jsPDF } from "jspdf";
-import autoTable from "jspdf-autotable";
 
 import { apiFetch } from "@/lib/client/api";
+import {
+  WhatsAppShareDialog,
+  type SaleShareData,
+} from "@/components/sales/sale-share-dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -37,6 +37,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -304,15 +311,7 @@ function VendorSaleDialog({
   onOpenChange: (open: boolean) => void;
   stock: VendorStockRow[];
   vendorName: string;
-  onSuccess: (sale: {
-    id: number;
-    saleNumber: string;
-    total: number;
-    customer: { name: string; phone: string | null };
-    items: { product: { name: string }; quantity: number; unitPrice: number }[];
-    pendingBalance: number;
-    payments: { id: number }[];
-  }) => void;
+  onSuccess: (sale: SaleShareData) => void;
 }) {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
@@ -571,7 +570,6 @@ function VendorSaleDialog({
         unitPrice: item.unitPrice,
       })),
       pendingBalance: amount < total ? total - amount : 0,
-      payments: sale.payments,
     });
   }
 
@@ -1218,118 +1216,212 @@ function ReturnToTruckDialog({
   );
 }
 
-function WhatsAppShareDialog({
+interface StockRequestItem {
+  id: number;
+  productId: number;
+  quantity: number;
+  product: { id: number; name: string; serial: string | null };
+}
+
+interface StockRequest {
+  id: number;
+  status: "PENDIENTE" | "PROCESADO";
+  requestDate: string;
+  notes: string | null;
+  truck: { id: number; name: string; plate: string | null };
+  user: { id: number; name: string };
+  processed: { id: number; name: string } | null;
+  items: StockRequestItem[];
+}
+
+function RequestStockDialog({
   open,
   onOpenChange,
-  sale,
+  assignments,
+  onSuccess,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  sale: {
-    id: number;
-    saleNumber: string;
-    total: number;
-    customer: { name: string; phone: string | null };
-    items: { product: { name: string }; quantity: number; unitPrice: number }[];
-    pendingBalance: number;
-  } | null;
+  assignments: VendorAssignment[];
+  onSuccess: () => void;
 }) {
-  const dateText = new Date().toLocaleDateString("es-CO", { dateStyle: "long" });
-  const timeText = new Date().toLocaleTimeString("es-CO", { timeStyle: "short" });
-
-  const receiptText = useMemo(() => {
-    if (!sale) return "";
-    const lines = [
-      `*COMPROBANTE DE VENTA*`,
-      `Venta: ${sale.saleNumber}`,
-      `Fecha: ${dateText} ${timeText}`,
-      `Cliente: ${sale.customer.name}`,
-    ];
-    lines.push("");
-    lines.push(`*Detalle:*`);
-    for (const item of sale.items) {
-      lines.push(
-        `• ${item.product.name} x${item.quantity} - ${currency.format(item.unitPrice)}`,
-      );
+  const truckOptions = useMemo(() => {
+    const map = new Map<number, { id: number; name: string; plate: string | null }>();
+    for (const a of assignments) {
+      if (a.status === "DEVUELTO") continue;
+      map.set(a.truck.id, a.truck);
     }
-    lines.push("");
-    lines.push(`*Total: ${currency.format(sale.total)}*`);
-    if (sale.pendingBalance > 0) {
-      lines.push(`Saldo pendiente: ${currency.format(sale.pendingBalance)}`);
+    return [...map.values()];
+  }, [assignments]);
+
+  const [truckId, setTruckId] = useState<string>("");
+  const [quantities, setQuantities] = useState<Record<number, string>>({});
+  const [notes, setNotes] = useState("");
+  const [formError, setFormError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const selectedTruckId = truckId ? Number(truckId) : truckOptions[0]?.id;
+
+  const productOptions = useMemo(() => {
+    const map = new Map<
+      number,
+      {
+        productId: number;
+        product: { id: number; name: string; serial: string | null };
+        available: number;
+      }
+    >();
+    for (const a of assignments) {
+      if (a.status === "DEVUELTO") continue;
+      if (a.truck.id !== selectedTruckId) continue;
+      for (const item of a.items) {
+        const current = map.get(item.productId);
+        map.set(item.productId, {
+          productId: item.productId,
+          product: item.product,
+          available: item.remaining + (current?.available ?? 0),
+        });
+      }
     }
-    return lines.join("\n");
-  }, [sale, dateText, timeText]);
+    return [...map.values()];
+  }, [assignments, selectedTruckId]);
 
-  if (!sale) return null;
-  const currentSale = sale;
-
-  function openWhatsApp() {
-    const phone = (currentSale.customer.phone ?? "").replace(/\D/g, "");
-    const url = `https://wa.me/${phone ? phone : ""}?text=${encodeURIComponent(receiptText)}`;
-    window.open(url, "_blank", "noopener,noreferrer");
-  }
-
-  function downloadPdf() {
-    const doc = new jsPDF({ unit: "mm", format: "a4" });
-    const pageWidth = doc.internal.pageSize.getWidth();
-    doc.setFontSize(14);
-    doc.text("COMPROBANTE DE VENTA", 14, 20);
-    doc.setFontSize(10);
-    doc.text(`Venta: ${currentSale.saleNumber}`, 14, 30);
-    doc.text(`Fecha: ${dateText} ${timeText}`, 14, 36);
-    doc.text(`Cliente: ${currentSale.customer.name}`, 14, 42);
-    if (currentSale.customer.phone)
-      doc.text(`Teléfono: ${currentSale.customer.phone}`, 14, 48);
-    autoTable(doc, {
-      startY: 56,
-      head: [["Producto", "Cant", "Precio", "Total"]],
-      body: currentSale.items.map((item) => [
-        item.product.name,
-        String(item.quantity),
-        currency.format(item.unitPrice),
-        currency.format(item.quantity * item.unitPrice),
-      ]),
-      styles: { fontSize: 9 },
-    });
-    const finalY =
-      (doc as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? 56;
-    doc.setFontSize(12);
-    doc.text(`Total: ${currency.format(currentSale.total)}`, pageWidth - 14, finalY + 12, {
-      align: "right",
-    });
-    if (currentSale.pendingBalance > 0) {
-      doc.setFontSize(10);
-      doc.text(
-        `Saldo pendiente: ${currency.format(currentSale.pendingBalance)}`,
-        pageWidth - 14,
-        finalY + 18,
-        { align: "right" },
-      );
+  async function submit() {
+    const items = productOptions
+      .map((opt) => ({
+        productId: opt.productId,
+        quantity: Number(quantities[opt.productId] ?? ""),
+      }))
+      .filter((i) => Number.isInteger(i.quantity) && i.quantity > 0);
+    if (items.length === 0) {
+      setFormError("Solicita al menos un producto con cantidad");
+      return;
     }
-    doc.save(`comprobante-${currentSale.saleNumber}.pdf`);
+    setSaving(true);
+    setFormError(null);
+    try {
+      await apiFetch("/api/inventory/vendors/requests", {
+        method: "POST",
+        body: JSON.stringify({
+          truckId: selectedTruckId,
+          notes: notes.trim() || null,
+          items,
+        }),
+      });
+      toast.success("Solicitud de stock enviada al camión");
+      onSuccess();
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Error al enviar la solicitud");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) {
+          setQuantities({});
+          setFormError(null);
+        }
+        onOpenChange(next);
+      }}
+    >
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Venta registrada</DialogTitle>
+          <DialogTitle>Pedir más stock</DialogTitle>
           <DialogDescription>
-            Comparte el comprobante de la venta <span className="font-medium">{sale.saleNumber}</span>{" "}
-            por WhatsApp.
+            Solicita al camión más mercancía de la que te ha asignado.
           </DialogDescription>
         </DialogHeader>
-        <pre className="max-h-56 overflow-y-auto whitespace-pre-wrap rounded-md bg-muted/50 p-3 text-xs">
-          {receiptText}
-        </pre>
-        <DialogFooter className="gap-2 sm:justify-start">
-          <Button variant="outline" onClick={downloadPdf}>
-            <Download /> Descargar PDF
-          </Button>
-          <Button onClick={openWhatsApp}>
-            <MessageCircle /> WhatsApp
-          </Button>
-        </DialogFooter>
+        <div className="space-y-4">
+          {truckOptions.length === 0 ? (
+            <p className="rounded-md border p-4 text-center text-sm text-muted-foreground">
+              No tienes asignaciones activas para pedir stock.
+            </p>
+          ) : (
+            <>
+              <div className="space-y-2">
+                <Label>Camion</Label>
+                <Select
+                  value={selectedTruckId ? String(selectedTruckId) : ""}
+                  onValueChange={(value) => {
+                    setTruckId(value);
+                    setQuantities({});
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecciona el camión" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {truckOptions.map((truck) => (
+                      <SelectItem key={truck.id} value={String(truck.id)}>
+                        {truck.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Producto</TableHead>
+                    <TableHead className="text-right">Disponible</TableHead>
+                    <TableHead className="w-28">Pedir</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {productOptions.length === 0 && (
+                    <TableRow>
+                      <TableCell
+                        colSpan={3}
+                        className="py-6 text-center text-muted-foreground"
+                      >
+                        Sin productos disponibles en este camión.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {productOptions.map((opt) => (
+                    <TableRow key={opt.productId}>
+                      <TableCell className="font-medium">{opt.product.name}</TableCell>
+                      <TableCell className="text-right">{opt.available}</TableCell>
+                      <TableCell>
+                        <Input
+                          type="number"
+                          min={1}
+                          placeholder="0"
+                          value={quantities[opt.productId] ?? ""}
+                          onChange={(event) =>
+                            setQuantities((prev) => ({
+                              ...prev,
+                              [opt.productId]: event.target.value,
+                            }))
+                          }
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <div className="space-y-2">
+                <Label htmlFor="request-notes">Notas (opcional)</Label>
+                <Textarea
+                  id="request-notes"
+                  placeholder="Ej: necesito más del producto X"
+                  value={notes}
+                  onChange={(event) => setNotes(event.target.value)}
+                />
+              </div>
+            </>
+          )}
+          {formError && <p className="text-sm text-destructive">{formError}</p>}
+          <DialogFooter>
+            <Button onClick={submit} disabled={saving || truckOptions.length === 0}>
+              {saving ? "Enviando…" : "Enviar solicitud"}
+            </Button>
+          </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   );
@@ -1346,15 +1438,9 @@ export function VendorSalesClient({
 }) {
   const queryClient = useQueryClient();
   const [saleOpen, setSaleOpen] = useState(false);
-  const [shareSale, setShareSale] = useState<{
-    id: number;
-    saleNumber: string;
-    total: number;
-    customer: { name: string; phone: string | null };
-    items: { product: { name: string }; quantity: number; unitPrice: number }[];
-    pendingBalance: number;
-  } | null>(null);
+  const [shareSale, setShareSale] = useState<SaleShareData | null>(null);
   const [returnAssignment, setReturnAssignment] = useState<VendorAssignment | null>(null);
+  const [requestOpen, setRequestOpen] = useState(false);
 
   const { data: stock, isLoading: stockLoading } = useQuery({
     queryKey: ["vendor-stock"],
@@ -1371,12 +1457,18 @@ export function VendorSalesClient({
     queryFn: () => apiFetch<SaleRow[]>("/api/sales"),
   });
 
+  const { data: requests, isLoading: requestsLoading } = useQuery({
+    queryKey: ["vendor-requests"],
+    queryFn: () => apiFetch<StockRequest[]>("/api/inventory/vendors/requests?mine=1"),
+  });
+
   const totalUnits = (stock ?? []).reduce((acc, row) => acc + row.quantity, 0);
 
   function refresh() {
     queryClient.invalidateQueries({ queryKey: ["vendor-stock"] });
     queryClient.invalidateQueries({ queryKey: ["vendor-assignments"] });
     queryClient.invalidateQueries({ queryKey: ["sales"] });
+    queryClient.invalidateQueries({ queryKey: ["vendor-requests"] });
   }
 
   return (
@@ -1391,6 +1483,11 @@ export function VendorSalesClient({
         {canCreate && (stock ?? []).length > 0 && (
           <Button className="w-full sm:w-auto" onClick={() => setSaleOpen(true)}>
             <Plus /> Vender
+          </Button>
+        )}
+        {canCreate && (assignments ?? []).some((a) => a.status !== "DEVUELTO") && (
+          <Button variant="outline" className="w-full sm:w-auto" onClick={() => setRequestOpen(true)}>
+            <PackageSearch /> Pedir más
           </Button>
         )}
       </div>
@@ -1514,6 +1611,62 @@ export function VendorSalesClient({
 
       <Card>
         <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <PackageSearch className="size-5" /> Solicitudes de stock
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {requestsLoading && <p className="py-8 text-center text-muted-foreground">Cargando…</p>}
+          {!requestsLoading && (requests ?? []).length === 0 && (
+            <p className="py-8 text-center text-muted-foreground">
+              Aún no has solicitado stock al camión.
+            </p>
+          )}
+          {!requestsLoading && (requests ?? []).length > 0 && (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>#</TableHead>
+                  <TableHead>Fecha</TableHead>
+                  <TableHead>Camion</TableHead>
+                  <TableHead>Productos</TableHead>
+                  <TableHead>Estado</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(requests ?? []).map((request) => (
+                  <TableRow key={request.id}>
+                    <TableCell className="font-medium">#{request.id}</TableCell>
+                    <TableCell className="whitespace-nowrap text-sm">
+                      {new Date(request.requestDate).toLocaleDateString("es-CO")}
+                    </TableCell>
+                    <TableCell>{request.truck.name}</TableCell>
+                    <TableCell>
+                      <div className="flex max-w-md flex-wrap gap-1">
+                        {request.items.map((item) => (
+                          <Badge key={item.id} variant="outline">
+                            {item.product.name} x{item.quantity}
+                          </Badge>
+                        ))}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={request.status === "PROCESADO" ? "secondary" : "outline"}
+                      >
+                        {request.status === "PROCESADO" ? "Despachado" : "Pendiente"}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle>Mis ventas</CardTitle>
         </CardHeader>
         <CardContent>
@@ -1602,6 +1755,20 @@ export function VendorSalesClient({
           assignment={returnAssignment}
           onSuccess={() => {
             setReturnAssignment(null);
+            refresh();
+          }}
+        />
+      )}
+
+      {requestOpen && (
+        <RequestStockDialog
+          open={true}
+          onOpenChange={(open) => {
+            if (!open) setRequestOpen(false);
+          }}
+          assignments={assignments ?? []}
+          onSuccess={() => {
+            setRequestOpen(false);
             refresh();
           }}
         />

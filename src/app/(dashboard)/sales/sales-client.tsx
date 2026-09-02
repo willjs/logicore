@@ -21,6 +21,10 @@ import {
 import { toast } from "sonner";
 
 import { apiFetch } from "@/lib/client/api";
+import {
+  WhatsAppShareDialog,
+  type SaleShareData,
+} from "@/components/sales/sale-share-dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -482,7 +486,7 @@ function TruckSaleDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   truck: TruckWithStock;
-  onSuccess: () => void;
+  onSuccess: (sale: SaleShareData) => void;
 }) {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
@@ -649,7 +653,7 @@ function TruckSaleDialog({
     }
     setFormError(null);
     setSubmitting(true);
-    let sale: { id: number; payments: { id: number }[] };
+    let sale: { id: number; saleNumber: string; payments: { id: number }[] };
     try {
       const payload = {
         customerId: selectedCustomer.id,
@@ -663,10 +667,13 @@ function TruckSaleDialog({
           unitPrice: item.unitPrice,
         })),
       };
-      sale = await apiFetch<{ id: number; payments: { id: number }[] }>("/api/sales", {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
+      sale = await apiFetch<{ id: number; saleNumber: string; payments: { id: number }[] }>(
+        "/api/sales",
+        {
+          method: "POST",
+          body: JSON.stringify(payload),
+        },
+      );
     } catch (error) {
       toast.error((error as Error).message);
       setFormError((error as Error).message);
@@ -675,7 +682,18 @@ function TruckSaleDialog({
     }
 
     toast.success("Venta registrada");
-    onSuccess();
+    onSuccess({
+      id: sale.id,
+      saleNumber: sale.saleNumber,
+      total,
+      customer: { name: selectedCustomer.name, phone: selectedCustomer.phone },
+      items: items.map((item) => ({
+        product: { name: item.name },
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+      })),
+      pendingBalance: 0,
+    });
 
     const paymentId = sale.payments?.[0]?.id;
     if (paymentId && paymentMethod === "TRANSFERENCIA" && receiptFile) {
@@ -1443,6 +1461,7 @@ function SaleDetailDialog({
 export function SalesClient({ canCreate, canPay, isAdmin }: { canCreate: boolean; canPay: boolean; isAdmin: boolean }) {
   const queryClient = useQueryClient();
   const [saleOpen, setSaleOpen] = useState(false);
+  const [shareSale, setShareSale] = useState<SaleShareData | null>(null);
   const [truckId, setTruckId] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [search, setSearch] = useState("");
@@ -1676,13 +1695,24 @@ export function SalesClient({ canCreate, canPay, isAdmin }: { canCreate: boolean
             if (!open) setSaleOpen(false);
           }}
           truck={selectedTruck}
-          onSuccess={() => {
+          onSuccess={(sale) => {
             setSaleOpen(false);
+            setShareSale(sale);
             queryClient.invalidateQueries({ queryKey: ["sales"] });
             queryClient.invalidateQueries({ queryKey: ["sales-trucks"] });
             queryClient.invalidateQueries({ queryKey: ["sale", detailId] });
             queryClient.invalidateQueries({ queryKey: ["customer-detail"] });
           }}
+        />
+      )}
+
+      {shareSale && (
+        <WhatsAppShareDialog
+          open={true}
+          onOpenChange={(open) => {
+            if (!open) setShareSale(null);
+          }}
+          sale={shareSale}
         />
       )}
 

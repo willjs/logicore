@@ -103,6 +103,7 @@ model Company {
   attachments          Attachment[]
   vendorInventory      VendorInventory[]
   vendorAssignments    VendorAssignment[]
+  vendorStockRequests  VendorStockRequest[]
 
   @@map("companies")
 }
@@ -132,6 +133,8 @@ model User {
   vendorInventory   VendorInventory[]
   vendorAssignments VendorAssignment[]
   assignedAssignments VendorAssignment[] @relation("AssignedByUser")
+  vendorStockRequests VendorStockRequest[]
+  processedVendorStockRequests VendorStockRequest[] @relation("VendorRequestProcessedBy")
 
   @@map("users")
 }
@@ -267,6 +270,7 @@ model Product {
   truckInventory       TruckInventory[]
   vendorInventory      VendorInventory[]
   vendorAssignmentItem VendorAssignmentItem[]
+  vendorStockRequestItem VendorStockRequestItem[]
   saleItems            SaleItem[]
   transferItems        TransferItem[]
   returnItems          TruckReturnItem[]
@@ -339,6 +343,7 @@ model Truck {
   transfers Transfer[]
   returns   TruckReturn[]
   vendorAssignments VendorAssignment[]
+  stockRequests     VendorStockRequest[]
 
   @@unique([companyId, name])
   @@map("trucks")
@@ -425,6 +430,48 @@ model VendorAssignmentItem {
 
   @@unique([assignmentId, productId])
   @@map("vendor_assignment_items")
+}
+
+enum VendorRequestStatus {
+  PENDIENTE
+  PROCESADO
+}
+
+model VendorStockRequest {
+  id          Int                 @id @default(autoincrement())
+  companyId   Int
+  truckId     Int
+  userId      Int
+  status      VendorRequestStatus @default(PENDIENTE)
+  notes       String?
+  requestDate DateTime            @default(now())
+  processedAt DateTime?
+  processedBy Int?
+  createdAt   DateTime            @default(now())
+
+  company   Company                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  truck     Truck                    @relation(fields: [truckId], references: [id])
+  user      User                     @relation(fields: [userId], references: [id])
+  processed User?                    @relation("VendorRequestProcessedBy", fields: [processedBy], references: [id])
+  items     VendorStockRequestItem[]
+
+  @@index([companyId, truckId])
+  @@index([companyId, userId])
+  @@index([companyId, status])
+  @@map("vendor_stock_requests")
+}
+
+model VendorStockRequestItem {
+  id        Int @id @default(autoincrement())
+  requestId Int
+  productId Int
+  quantity  Int
+
+  request VendorStockRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  product Product            @relation(fields: [productId], references: [id])
+
+  @@unique([requestId, productId])
+  @@map("vendor_stock_request_items")
 }
 
 // ---------------------------------------------------------------------------

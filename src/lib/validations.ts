@@ -227,3 +227,14 @@ export const vendorReturnSchema = z.object({
   notes: z.string().trim().max(300).optional().nullable(),
   items: z.array(vendorItemSchema).min(1, "Agrega al menos un producto"),
 });
+
+export const vendorStockRequestSchema = z.object({
+  truckId: z.number().int().positive("El camión es requerido"),
+  notes: z.string().trim().max(300).optional().nullable(),
+  items: z.array(vendorItemSchema).min(1, "Solicita al menos un producto"),
+});
+
+export const vendorStockDispatchSchema = z.object({
+  notes: z.string().trim().max(300).optional().nullable(),
+  items: z.array(vendorItemSchema).optional(),
+});

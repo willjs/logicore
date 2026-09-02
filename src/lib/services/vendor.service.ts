@@ -74,6 +74,7 @@ export interface AssignVendorInput {
   userId: number;
   items: VendorItem[];
   notes?: string | null;
+  requestId?: number | null;
 }
 
 export async function assignVendorStock(
@@ -111,6 +112,19 @@ export async function assignVendorStock(
   const productMap = new Map(products.map((p) => [p.id, p.name]));
 
   return prisma.$transaction(async (tx) => {
+    if (input.requestId) {
+      const request = await tx.vendorStockRequest.findFirst({
+        where: { id: input.requestId, companyId },
+        select: { id: true, status: true },
+      });
+      if (!request) {
+        throw new ApiError("La solicitud de stock no existe", 404, "REQUEST_NOT_FOUND");
+      }
+      if (request.status !== "PENDIENTE") {
+        throw new ApiError("Esta solicitud ya fue procesada", 400, "ALREADY_PROCESSED");
+      }
+    }
+
     const trows = await tx.$queryRaw<{ id: number; productId: number; quantity: number }[]>`
       SELECT id, productId, quantity FROM truck_inventory
       WHERE truckId = ${input.truckId} AND productId IN (${Prisma.join(productIds)})
@@ -198,6 +212,13 @@ export async function assignVendorStock(
       entityId: assignment.id,
       details: { truckId: input.truckId, userId: input.userId, items: input.items.length },
     });
+
+    if (input.requestId) {
+      await tx.vendorStockRequest.update({
+        where: { id: input.requestId },
+        data: { status: "PROCESADO", processedAt: new Date(), processedBy: assignedBy },
+      });
+    }
 
     return assignment;
   });
@@ -375,4 +396,134 @@ export async function listVendorAssignments(
       remaining: i.quantity - i.returnedQuantity,
     })),
   }));
+}
+
+export interface VendorStockRequestInput {
+  truckId: number;
+  items: VendorItem[];
+  notes?: string | null;
+}
+
+export async function createVendorStockRequest(
+  companyId: number,
+  userId: number,
+  input: VendorStockRequestInput,
+) {
+  if (input.items.length === 0) {
+    throw new ApiError("Debes solicitar al menos un producto", 400, "VALIDATION_ERROR");
+  }
+
+  const truck = await prisma.truck.findFirst({
+    where: { id: input.truckId, companyId, active: true },
+    select: { id: true },
+  });
+  if (!truck) {
+    throw new ApiError("El camión no existe en esta empresa", 404, "TRUCK_NOT_FOUND");
+  }
+
+  const hasAssignment = await prisma.vendorAssignment.findFirst({
+    where: { companyId, userId, truckId: input.truckId, status: { not: "DEVUELTO" } },
+    select: { id: true },
+  });
+  if (!hasAssignment) {
+    throw new ApiError(
+      "Solo puedes pedir stock al camión que te ha asignado mercancía",
+      400,
+      "NOT_ASSIGNED_TO_TRUCK",
+    );
+  }
+
+  const productIds = [...new Set(input.items.map((i) => i.productId))];
+  const products = await prisma.product.findMany({
+    where: { id: { in: productIds }, companyId },
+    select: { id: true },
+  });
+  if (products.length !== productIds.length) {
+    throw new ApiError(
+      "Alguno de los productos no existe en esta empresa",
+      400,
+      "PRODUCT_NOT_FOUND",
+    );
+  }
+
+  return prisma.vendorStockRequest.create({
+    data: {
+      companyId,
+      truckId: input.truckId,
+      userId,
+      notes: input.notes ?? null,
+      items: {
+        create: input.items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
+      },
+    },
+    include: {
+      truck: { select: { id: true, name: true, plate: true } },
+      user: { select: { id: true, name: true } },
+      items: { include: { product: { select: { id: true, name: true, serial: true } } } },
+    },
+  });
+}
+
+export async function listVendorStockRequests(
+  companyId: number,
+  opts: { userId?: number; truckId?: number } = {},
+) {
+  const requests = await prisma.vendorStockRequest.findMany({
+    where: {
+      companyId,
+      ...(opts.userId ? { userId: opts.userId } : {}),
+      ...(opts.truckId ? { truckId: opts.truckId } : {}),
+    },
+    orderBy: { requestDate: "desc" },
+    include: {
+      user: { select: { id: true, name: true } },
+      truck: { select: { id: true, name: true, plate: true } },
+      processed: { select: { id: true, name: true } },
+      items: { include: { product: { select: { id: true, name: true, serial: true } } } },
+    },
+  });
+  return requests;
+}
+
+export async function dispatchVendorStockRequest(
+  companyId: number,
+  dispatchedBy: number,
+  requestId: number,
+  items?: VendorItem[],
+) {
+  const request = await prisma.vendorStockRequest.findFirst({
+    where: { id: requestId, companyId },
+    include: { items: true },
+  });
+  if (!request) {
+    throw new ApiError("La solicitud no existe", 404, "REQUEST_NOT_FOUND");
+  }
+  if (request.status !== "PENDIENTE") {
+    throw new ApiError("Esta solicitud ya fue procesada", 400, "ALREADY_PROCESSED");
+  }
+
+  const toAssign =
+    items && items.length > 0
+      ? items
+      : request.items.map((i) => ({ productId: i.productId, quantity: i.quantity }));
+
+  const assignment = await assignVendorStock(companyId, dispatchedBy, {
+    truckId: request.truckId,
+    userId: request.userId,
+    notes: request.notes ?? null,
+    items: toAssign,
+    requestId: request.id,
+  });
+
+  const updated = await prisma.vendorStockRequest.findUnique({
+    where: { id: request.id },
+    include: {
+      user: { select: { id: true, name: true } },
+      truck: { select: { id: true, name: true, plate: true } },
+      processed: { select: { id: true, name: true } },
+      items: { include: { product: { select: { id: true, name: true, serial: true } } } },
+    },
+  });
+
+  return { request: updated, assignment };
 }

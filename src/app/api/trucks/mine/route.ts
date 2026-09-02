@@ -1,6 +1,10 @@
 import { withApi, ok } from "@/lib/api";
 import { prisma } from "@/lib/db";
-import { listVendorsWithStock, listVendorAssignments } from "@/lib/services/vendor.service";
+import {
+  listVendorsWithStock,
+  listVendorAssignments,
+  listVendorStockRequests,
+} from "@/lib/services/vendor.service";
 import { serialize } from "@/lib/serialize";
 
 export const GET = withApi(
@@ -27,12 +31,13 @@ export const GET = withApi(
     });
 
     if (!truck) {
-      return ok(serialize({ truck: null, inventory: [], vendors: [], assignments: [] }));
+      return ok(serialize({ truck: null, inventory: [], vendors: [], assignments: [], requests: [] }));
     }
 
-    const [vendors, assignments] = await Promise.all([
+    const [vendors, assignments, requests] = await Promise.all([
       listVendorsWithStock(session.company.id),
       listVendorAssignments(session.company.id, { truckId: truck.id }),
+      listVendorStockRequests(session.company.id, { truckId: truck.id }),
     ]);
 
     return ok(
@@ -41,6 +46,7 @@ export const GET = withApi(
         inventory: truck.inventory,
         vendors,
         assignments,
+        requests,
       }),
     );
   },
