@@ -9,7 +9,9 @@ export const GET = withApi(
       throw new ApiError("Identificador inválido", 400, "INVALID_ID");
     }
 
-    const sale = await getSale(id, session.company.id);
+    const sale = await getSale(id, session.company.id, {
+      userId: /vendedor/i.test(session.role.name) ? session.user.id : undefined,
+    });
     return ok(serialize(sale));
   },
   { permissions: ["sales.view"] },

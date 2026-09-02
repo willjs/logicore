@@ -21,6 +21,10 @@ export const userCreateSchema = z.object({
   name: z.string().trim().min(1, "El nombre es requerido").max(120),
   email: z.string().email("Correo electrónico inválido").trim().toLowerCase(),
   password: z.string().min(6, "La contraseña debe tener al menos 6 caracteres"),
+  contractNumber: z.string().trim().max(60).optional().nullable(),
+  country: z.string().trim().max(80).optional().nullable(),
+  department: z.string().trim().max(120).optional().nullable(),
+  municipality: z.string().trim().max(120).optional().nullable(),
   assignments: z
     .array(z.object({ companyId: z.number().int().positive(), roleId: z.number().int().positive() }))
     .optional()
@@ -31,6 +35,10 @@ export const userEditSchema = z.object({
   name: z.string().trim().min(1, "El nombre es requerido").max(120).optional(),
   email: z.string().email("Correo electrónico inválido").trim().toLowerCase().optional(),
   password: z.string().min(6, "La contraseña debe tener al menos 6 caracteres").optional(),
+  contractNumber: z.string().trim().max(60).optional().nullable(),
+  country: z.string().trim().max(80).optional().nullable(),
+  department: z.string().trim().max(120).optional().nullable(),
+  municipality: z.string().trim().max(120).optional().nullable(),
   active: z.boolean().optional(),
 });
 
@@ -170,6 +178,7 @@ export const saleCreateSchema = z.object({
   truckId: z.number().int().positive().nullable().optional(),
   paymentMethod: z.enum(["EFECTIVO", "TRANSFERENCIA"]).nullable().optional(),
   amountReceived: z.number().nonnegative().optional(),
+  source: z.enum(["TRUCK", "WAREHOUSE", "VENDOR"]).optional(),
   notes: z.string().trim().max(300).optional().nullable(),
   items: z.array(saleItemSchema).min(1, "Agrega al menos un producto"),
 });
@@ -199,4 +208,22 @@ export const returnCreateSchema = z.object({
   warehouseId: z.number().int().positive().optional(),
   notes: z.string().trim().max(300).optional().nullable(),
   items: z.array(returnItemSchema).min(1, "Agrega al menos un producto"),
+});
+
+export const vendorItemSchema = z.object({
+  productId: z.number().int().positive("El producto es requerido"),
+  quantity: z.number().int("La cantidad debe ser un entero").positive("La cantidad debe ser mayor a 0"),
+});
+
+export const vendorAssignSchema = z.object({
+  truckId: z.number().int().positive("El camión es requerido"),
+  userId: z.number().int().positive("El vendedor es requerido"),
+  notes: z.string().trim().max(300).optional().nullable(),
+  items: z.array(vendorItemSchema).min(1, "Agrega al menos un producto"),
+});
+
+export const vendorReturnSchema = z.object({
+  assignmentId: z.number().int().positive("La asignación es requerida"),
+  notes: z.string().trim().max(300).optional().nullable(),
+  items: z.array(vendorItemSchema).min(1, "Agrega al menos un producto"),
 });

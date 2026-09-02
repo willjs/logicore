@@ -101,28 +101,37 @@ model Company {
   movements            StockMovement[]
   auditLogs            AuditLog[]
   attachments          Attachment[]
+  vendorInventory      VendorInventory[]
+  vendorAssignments    VendorAssignment[]
 
   @@map("companies")
 }
 
 model User {
-  id           Int      @id @default(autoincrement())
-  name         String
-  email        String   @unique
-  passwordHash String
-  superadmin   Boolean  @default(false)
-  active       Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id             Int      @id @default(autoincrement())
+  name           String
+  email          String   @unique
+  passwordHash   String
+  contractNumber String?  @db.VarChar(60)
+  country        String?  @db.VarChar(80)
+  department     String?  @db.VarChar(120)
+  municipality   String?  @db.VarChar(120)
+  superadmin     Boolean  @default(false)
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  companies  UserCompany[]
-  sales      Sale[]
-  payments   Payment[]
-  transfers  Transfer[]
-  returns    TruckReturn[]
-  movements  StockMovement[]
-  auditLogs  AuditLog[]
-  trucks     Truck[]
+  companies         UserCompany[]
+  sales             Sale[]
+  payments          Payment[]
+  transfers         Transfer[]
+  returns           TruckReturn[]
+  movements         StockMovement[]
+  auditLogs         AuditLog[]
+  trucks            Truck[]
+  vendorInventory   VendorInventory[]
+  vendorAssignments VendorAssignment[]
+  assignedAssignments VendorAssignment[] @relation("AssignedByUser")
 
   @@map("users")
 }
@@ -254,12 +263,14 @@ model Product {
   company            Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
   brand              Brand?             @relation(fields: [brandId], references: [id])
   category           Category?          @relation(fields: [categoryId], references: [id])
-  warehouseInventory WarehouseInventory[]
-  truckInventory     TruckInventory[]
-  saleItems          SaleItem[]
-  transferItems      TransferItem[]
-  returnItems        TruckReturnItem[]
-  movements          StockMovement[]
+  warehouseInventory   WarehouseInventory[]
+  truckInventory       TruckInventory[]
+  vendorInventory      VendorInventory[]
+  vendorAssignmentItem VendorAssignmentItem[]
+  saleItems            SaleItem[]
+  transferItems        TransferItem[]
+  returnItems          TruckReturnItem[]
+  movements            StockMovement[]
 
   @@index([companyId, name])
   @@index([companyId, serial])
@@ -327,6 +338,7 @@ model Truck {
   sales     Sale[]
   transfers Transfer[]
   returns   TruckReturn[]
+  vendorAssignments VendorAssignment[]
 
   @@unique([companyId, name])
   @@map("trucks")
@@ -356,6 +368,63 @@ model TruckInventory {
 
   @@unique([truckId, productId])
   @@map("truck_inventory")
+}
+
+model VendorInventory {
+  id        Int @id @default(autoincrement())
+  companyId Int
+  userId    Int
+  productId Int
+  quantity  Int @default(0)
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+  @@index([companyId, userId])
+  @@map("vendor_inventory")
+}
+
+enum VendorAssignmentStatus {
+  ASIGNADO
+  DEVUELTO
+}
+
+model VendorAssignment {
+  id              Int                      @id @default(autoincrement())
+  companyId       Int
+  truckId         Int
+  userId          Int
+  assignedBy      Int
+  status          VendorAssignmentStatus   @default(ASIGNADO)
+  notes           String?
+  assignmentDate  DateTime                 @default(now())
+  createdAt       DateTime                 @default(now())
+
+  company  Company                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  truck    Truck                    @relation(fields: [truckId], references: [id])
+  user     User                     @relation(fields: [userId], references: [id])
+  assigned User                     @relation("AssignedByUser", fields: [assignedBy], references: [id])
+  items    VendorAssignmentItem[]
+
+  @@index([companyId, truckId])
+  @@index([companyId, userId])
+  @@map("vendor_assignments")
+}
+
+model VendorAssignmentItem {
+  id               Int @id @default(autoincrement())
+  assignmentId     Int
+  productId        Int
+  quantity         Int
+  returnedQuantity Int @default(0)
+
+  assignment VendorAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  product    Product          @relation(fields: [productId], references: [id])
+
+  @@unique([assignmentId, productId])
+  @@map("vendor_assignment_items")
 }
 
 // ---------------------------------------------------------------------------

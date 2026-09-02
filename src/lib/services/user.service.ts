@@ -19,6 +19,10 @@ export async function createUser(data: {
   name: string;
   email: string;
   passwordHash: string;
+  contractNumber?: string | null;
+  country?: string | null;
+  department?: string | null;
+  municipality?: string | null;
   assignments?: AssignmentInput[];
 }) {
   const assignments = data.assignments ?? [];
@@ -32,7 +36,15 @@ export async function createUser(data: {
 
   return prisma.$transaction(async (tx) => {
     const user = await tx.user.create({
-      data: { name: data.name, email: data.email, passwordHash: data.passwordHash },
+      data: {
+        name: data.name,
+        email: data.email,
+        passwordHash: data.passwordHash,
+        contractNumber: data.contractNumber ?? null,
+        country: data.country ?? null,
+        department: data.department ?? null,
+        municipality: data.municipality ?? null,
+      },
     });
 
     for (const assignment of assignments) {
@@ -54,9 +66,28 @@ export async function createUser(data: {
 
 export async function updateUser(
   id: number,
-  data: { name?: string; email?: string; passwordHash?: string },
+  data: {
+    name?: string;
+    email?: string;
+    passwordHash?: string;
+    contractNumber?: string | null;
+    country?: string | null;
+    department?: string | null;
+    municipality?: string | null;
+  },
 ) {
-  return prisma.user.update({ where: { id }, data });
+  return prisma.user.update({
+    where: { id },
+    data: {
+      ...(data.name !== undefined && { name: data.name }),
+      ...(data.email !== undefined && { email: data.email }),
+      ...(data.passwordHash !== undefined && { passwordHash: data.passwordHash }),
+      ...(data.contractNumber !== undefined && { contractNumber: data.contractNumber ?? null }),
+      ...(data.country !== undefined && { country: data.country ?? null }),
+      ...(data.department !== undefined && { department: data.department ?? null }),
+      ...(data.municipality !== undefined && { municipality: data.municipality ?? null }),
+    },
+  });
 }
 
 export async function toggleUser(id: number, active: boolean) {
@@ -75,6 +106,10 @@ export async function listUsersByCompany(companyId: number) {
     name: row.user.name,
     email: row.user.email,
     active: row.user.active,
+    contractNumber: row.user.contractNumber,
+    country: row.user.country,
+    department: row.user.department,
+    municipality: row.user.municipality,
     role: row.role ? { id: row.role.id, name: row.role.name } : null,
     createdAt: row.user.createdAt,
   }));

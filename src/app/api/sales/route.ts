@@ -14,6 +14,7 @@ export const GET = withApi(
       status,
       search: search || undefined,
       customerId: Number.isInteger(customerId) ? customerId : undefined,
+      userId: /vendedor/i.test(session.role.name) ? session.user.id : undefined,
     });
     return ok(serialize(sales));
   },
@@ -40,6 +41,7 @@ export const POST = withApi(
       amountReceived: parsed.data.amountReceived,
       notes: parsed.data.notes ?? null,
       items: parsed.data.items,
+      source: parsed.data.source ?? null,
     });
 
     return ok(serialize(sale), 201);

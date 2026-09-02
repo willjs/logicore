@@ -35,6 +35,10 @@ export const POST = withApi(
       name: parsed.data.name,
       email: parsed.data.email,
       passwordHash,
+      contractNumber: parsed.data.contractNumber,
+      country: parsed.data.country,
+      department: parsed.data.department,
+      municipality: parsed.data.municipality,
       assignments: parsed.data.assignments,
     });
 

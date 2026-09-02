@@ -7,6 +7,7 @@ export default async function TrucksPage() {
     <TrucksClient
       canCreate={session.permissions.includes("trucks.create")}
       canLoad={session.permissions.includes("transfers.create")}
+      canAssign={session.permissions.includes("sales.create")}
     />
   );
 }

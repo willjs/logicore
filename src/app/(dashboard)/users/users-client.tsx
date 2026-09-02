@@ -39,12 +39,18 @@ import {
 } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
 
+import { COLOMBIA_DEPARTMENTS, COLOMBIA_COUNTRY } from "@/lib/colombia";
+
 interface UserRow {
   id: number;
   name: string;
   email: string;
   active: boolean;
   role: { id: number; name: string } | null;
+  contractNumber: string | null;
+  country: string | null;
+  department: string | null;
+  municipality: string | null;
   createdAt: string;
 }
 
@@ -73,6 +79,10 @@ const createSchema = z.object({
   password: z.string().min(6, "La contraseña debe tener al menos 6 caracteres"),
   companyId: z.number().int().positive(),
   roleId: z.number().int().positive(),
+  contractNumber: z.string().trim().max(60).optional().or(z.literal("")),
+  country: z.string().trim().max(80).optional().or(z.literal("")),
+  department: z.string().trim().max(120).optional().or(z.literal("")),
+  municipality: z.string().trim().max(120).optional().or(z.literal("")),
 });
 
 type CreateForm = z.infer<typeof createSchema>;
@@ -103,6 +113,11 @@ function CreateUserDialog({
   onSuccess: () => void;
 }) {
   const [selectedCompanyId, setSelectedCompanyId] = useState<number>(activeCompanyId);
+  const [country, setCountry] = useState<string>(COLOMBIA_COUNTRY);
+  const [department, setDepartment] = useState<string>("");
+  const [municipality, setMunicipality] = useState<string>("");
+  const departmentMunicipalities =
+    COLOMBIA_DEPARTMENTS.find((d) => d.name === department)?.municipalities ?? [];
   const {
     register,
     handleSubmit,
@@ -110,7 +125,7 @@ function CreateUserDialog({
     formState: { errors },
   } = useForm<CreateForm>({
     resolver: zodResolver(createSchema),
-    defaultValues: { companyId: activeCompanyId },
+    defaultValues: { companyId: activeCompanyId, country: COLOMBIA_COUNTRY },
   });
 
   async function onSubmit(values: CreateForm) {
@@ -120,6 +135,10 @@ function CreateUserDialog({
         name: values.name,
         email: values.email,
         password: values.password,
+        contractNumber: values.contractNumber?.trim() || null,
+        country: values.country?.trim() || null,
+        department: values.department?.trim() || null,
+        municipality: values.municipality?.trim() || null,
         assignments: [{ companyId: values.companyId, roleId: values.roleId }],
       }),
     });
@@ -155,6 +174,93 @@ function CreateUserDialog({
             <Label htmlFor="password">Contraseña *</Label>
             <Input id="password" type="password" placeholder="Mínimo 6 caracteres" {...register("password")} />
             {errors.password && <p className="text-sm text-destructive">{errors.password.message}</p>}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="contractNumber">Número de contrato</Label>
+            <Input
+              id="contractNumber"
+              placeholder="Ej. C-0001"
+              {...register("contractNumber")}
+            />
+            {errors.contractNumber && (
+              <p className="text-sm text-destructive">{errors.contractNumber.message}</p>
+            )}
+          </div>
+          <div className="rounded-md border bg-muted/30 p-3">
+            <div className="mb-3 space-y-2">
+              <Label htmlFor="country">País</Label>
+              <Select
+                value={country}
+                onValueChange={(value) => {
+                  setCountry(value);
+                  setValue("country", value, { shouldValidate: true });
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccionar país" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={COLOMBIA_COUNTRY}>{COLOMBIA_COUNTRY}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Departamento</Label>
+                <Select
+                  value={department}
+                  onValueChange={(value) => {
+                    setDepartment(value);
+                    setValue("department", value, { shouldValidate: true });
+                    const found = COLOMBIA_DEPARTMENTS.find((d) => d.name === value);
+                    if (!found) {
+                      setMunicipality("");
+                      setValue("municipality", "", { shouldValidate: true });
+                    }
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccionar" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-64">
+                    {COLOMBIA_DEPARTMENTS.map((dep) => (
+                      <SelectItem key={dep.name} value={dep.name}>
+                        {dep.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Municipio</Label>
+                <Select
+                  value={municipality}
+                  onValueChange={(value) => {
+                    setMunicipality(value);
+                    setValue("municipality", value, { shouldValidate: true });
+                  }}
+                  disabled={!department}
+                >
+                  <SelectTrigger>
+                    <SelectValue
+                      placeholder={department ? "Autorelleno" : "Elige departamento"}
+                    />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-64">
+                    {departmentMunicipalities.map((mun) => (
+                      <SelectItem key={mun} value={mun}>
+                        {mun}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {department && (
+                  <p className="text-xs text-muted-foreground">
+                    Municipios de {department} (autorelleno)
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
@@ -498,6 +604,8 @@ export function UsersClient({ activeCompanyId }: { activeCompanyId: number }) {
                 <TableRow>
                   <TableHead>Nombre</TableHead>
                   <TableHead>Correo</TableHead>
+                  <TableHead>Contrato</TableHead>
+                  <TableHead>Ubicación</TableHead>
                   <TableHead>Rol</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
@@ -506,7 +614,7 @@ export function UsersClient({ activeCompanyId }: { activeCompanyId: number }) {
               <TableBody>
                 {data?.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
+                    <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
                       No hay usuarios en esta empresa
                     </TableCell>
                   </TableRow>
@@ -515,6 +623,12 @@ export function UsersClient({ activeCompanyId }: { activeCompanyId: number }) {
                   <TableRow key={user.id}>
                     <TableCell className="font-medium">{user.name}</TableCell>
                     <TableCell>{user.email}</TableCell>
+                    <TableCell>{user.contractNumber ?? "—"}</TableCell>
+                    <TableCell>
+                      {user.municipality
+                        ? `${user.municipality}, ${user.department ?? ""}`
+                        : user.department ?? "—"}
+                    </TableCell>
                     <TableCell>
                       {user.role ? (
                         <Badge variant="secondary">{user.role.name}</Badge>

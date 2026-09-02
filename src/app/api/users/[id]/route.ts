@@ -35,10 +35,22 @@ export const PATCH = withApi(
       }
     }
 
-    const data: { name?: string; email?: string; passwordHash?: string } = {};
+    const data: {
+      name?: string;
+      email?: string;
+      passwordHash?: string;
+      contractNumber?: string | null;
+      country?: string | null;
+      department?: string | null;
+      municipality?: string | null;
+    } = {};
     if (parsed.data.name !== undefined) data.name = parsed.data.name;
     if (parsed.data.email !== undefined) data.email = parsed.data.email;
     if (parsed.data.password) data.passwordHash = bcrypt.hashSync(parsed.data.password, 10);
+    if (parsed.data.contractNumber !== undefined) data.contractNumber = parsed.data.contractNumber;
+    if (parsed.data.country !== undefined) data.country = parsed.data.country;
+    if (parsed.data.department !== undefined) data.department = parsed.data.department;
+    if (parsed.data.municipality !== undefined) data.municipality = parsed.data.municipality;
 
     const user = await updateUser(id, data);
 

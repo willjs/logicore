@@ -18,11 +18,21 @@ export interface SaleInput {
   amountReceived?: number;
   notes?: string | null;
   items: SaleItemInput[];
+  source?: "TRUCK" | "WAREHOUSE" | "VENDOR" | null;
 }
 
 export async function createSale(input: SaleInput) {
-  const { companyId, userId, customerId, truckId, paymentMethod, amountReceived, notes, items } =
-    input;
+  const {
+    companyId,
+    userId,
+    customerId,
+    truckId,
+    paymentMethod,
+    amountReceived,
+    notes,
+    items,
+  } = input;
+  const source = input.source ?? (truckId ? "TRUCK" : "WAREHOUSE");
 
   const customer = await prisma.customer.findFirst({ where: { id: customerId, companyId } });
   if (!customer) {
@@ -34,6 +44,16 @@ export async function createSale(input: SaleInput) {
     truck = await prisma.truck.findFirst({ where: { id: truckId, companyId } });
     if (!truck) {
       throw new ApiError("El camión no existe en esta empresa", 400, "TRUCK_NOT_FOUND");
+    }
+  }
+
+  if (source === "VENDOR") {
+    const isActiveVendor = await prisma.userCompany.findFirst({
+      where: { userId, companyId, active: true },
+      include: { role: true },
+    });
+    if (!isActiveVendor || !/vendedor/i.test(isActiveVendor.role.name)) {
+      throw new ApiError("La venta desde stock de vendedor requiere rol VENDEDOR", 400, "NOT_VENDOR");
     }
   }
 
@@ -59,24 +79,34 @@ export async function createSale(input: SaleInput) {
       ? "PAGADO"
       : "ABONO";
 
-  const source = truckId
-    ? { kind: "TRUCK" as const, id: truckId, name: truck!.name }
-    : await (async () => {
-        const wh = await prisma.warehouse.findFirst({
-          where: { companyId, active: true },
-          orderBy: { id: "asc" },
-        });
-        if (!wh) {
-          throw new ApiError("No hay una bodega activa para descontar la venta", 400, "NO_ACTIVE_WAREHOUSE");
-        }
-        return { kind: "WAREHOUSE" as const, id: wh.id, name: wh.name };
-      })();
+  const location =
+    source === "VENDOR"
+      ? { kind: "VENDOR" as const, id: userId, name: (await prisma.user.findUnique({ where: { id: userId } }))?.name ?? "Vendedor" }
+      : source === "TRUCK"
+        ? { kind: "TRUCK" as const, id: truckId!, name: truck!.name }
+        : await (async () => {
+            const wh = await prisma.warehouse.findFirst({
+              where: { companyId, active: true },
+              orderBy: { id: "asc" },
+            });
+            if (!wh) {
+              throw new ApiError("No hay una bodega activa para descontar la venta", 400, "NO_ACTIVE_WAREHOUSE");
+            }
+            return { kind: "WAREHOUSE" as const, id: wh.id, name: wh.name };
+          })();
 
   return prisma.$transaction(async (tx) => {
-    const table = source.kind === "TRUCK" ? "truck_inventory" : "warehouse_inventory";
+    const table =
+      location.kind === "TRUCK"
+        ? "truck_inventory"
+        : location.kind === "VENDOR"
+          ? "vendor_inventory"
+          : "warehouse_inventory";
+    const column =
+      location.kind === "VENDOR" ? "userId" : location.kind === "TRUCK" ? "truckId" : "warehouseId";
     const rows = await tx.$queryRaw<{ id: number; productId: number; quantity: number }[]>`
       SELECT id, productId, quantity FROM ${Prisma.raw(table)}
-      WHERE ${source.kind === "TRUCK" ? Prisma.raw("truckId") : Prisma.raw("warehouseId")} = ${source.id}
+      WHERE ${Prisma.raw(column)} = ${location.id}
       AND productId IN (${Prisma.join(productIds)})
       FOR UPDATE
     `;
@@ -85,7 +115,7 @@ export async function createSale(input: SaleInput) {
       const current = stockMap.get(item.productId)?.quantity ?? 0;
       if (current < item.quantity) {
         throw new ApiError(
-          `Stock insuficiente de "${productMap.get(item.productId)}" en ${source.name}`,
+          `Stock insuficiente de "${productMap.get(item.productId)}" en el vendedor`,
           400,
           "INSUFFICIENT_STOCK",
         );
@@ -100,7 +130,7 @@ export async function createSale(input: SaleInput) {
       data: {
         companyId,
         customerId,
-        truckId: source.kind === "TRUCK" ? source.id : null,
+        truckId: location.kind === "TRUCK" ? location.id : null,
         userId,
         saleNumber,
         subtotal,
@@ -145,8 +175,13 @@ export async function createSale(input: SaleInput) {
     for (const item of items) {
       const stockRow = stockMap.get(item.productId);
       if (stockRow) {
-        if (source.kind === "TRUCK") {
+        if (location.kind === "TRUCK") {
           await tx.truckInventory.update({
+            where: { id: stockRow.id },
+            data: { quantity: stockRow.quantity - item.quantity },
+          });
+        } else if (location.kind === "VENDOR") {
+          await tx.vendorInventory.update({
             where: { id: stockRow.id },
             data: { quantity: stockRow.quantity - item.quantity },
           });
@@ -164,8 +199,13 @@ export async function createSale(input: SaleInput) {
           productId: item.productId,
           type: "VENTA",
           quantity: -item.quantity,
-          originType: source.kind === "TRUCK" ? "TRUCK" : "WAREHOUSE",
-          originId: source.id,
+          originType:
+            location.kind === "TRUCK"
+              ? "TRUCK"
+              : location.kind === "VENDOR"
+                ? "TRUCK"
+                : "WAREHOUSE",
+          originId: location.kind === "VENDOR" ? null : location.id,
           referenceType: "SALE",
           referenceId: sale.id,
           description: `Venta ${saleNumber}`,
@@ -196,10 +236,11 @@ export async function createSale(input: SaleInput) {
 
 export async function listSalesByCompany(
   companyId: number,
-  opts: { status?: string; search?: string; customerId?: number } = {},
+  opts: { status?: string; search?: string; customerId?: number; userId?: number } = {},
 ) {
   const where: Prisma.SaleWhereInput = {
     companyId,
+    ...(opts.userId ? { userId: opts.userId } : {}),
     ...(opts.status ? { status: opts.status as PaymentStatus } : {}),
     ...(opts.customerId ? { customerId: opts.customerId } : {}),
     ...(opts.search
@@ -224,9 +265,9 @@ export async function listSalesByCompany(
   });
 }
 
-export async function getSale(id: number, companyId: number) {
+export async function getSale(id: number, companyId: number, opts: { userId?: number } = {}) {
   const sale = await prisma.sale.findFirst({
-    where: { id, companyId },
+    where: { id, ...(opts.userId ? { userId: opts.userId } : {}), companyId },
     include: {
       customer: true,
       truck: { select: { id: true, name: true, plate: true } },

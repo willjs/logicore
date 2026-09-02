@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Boxes, Pencil, Plus } from "lucide-react";
+import { Boxes, Pencil, Plus, UserCheck } from "lucide-react";
 import { toast } from "sonner";
 
 import { apiFetch } from "@/lib/client/api";
@@ -305,20 +305,195 @@ function LoadTruckDialog({
   );
 }
 
+interface TruckStockRow {
+  id: number;
+  quantity: number;
+  product: { id: number; name: string; serial: string | null; salePrice: number };
+}
+
+interface TruckWithStock {
+  id: number;
+  name: string;
+  plate: string | null;
+  inventory: TruckStockRow[];
+}
+
+interface VendorOption {
+  id: number;
+  name: string;
+  contractNumber: string | null;
+  inventory: { productId: number; quantity: number }[];
+}
+
+function AssignVendorDialog({
+  open,
+  onOpenChange,
+  truck,
+  vendors,
+  onSuccess,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  truck: TruckWithStock;
+  vendors: VendorOption[];
+  onSuccess: () => void;
+}) {
+  const [userId, setUserId] = useState<string>("");
+  const [quantities, setQuantities] = useState<Record<number, string>>({});
+  const [formError, setFormError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const availableItems = truck.inventory.filter((row) => row.quantity > 0);
+
+  function onOpenChangeWrapped(next: boolean) {
+    if (!next) {
+      setUserId("");
+      setQuantities({});
+      setFormError(null);
+    }
+    onOpenChange(next);
+  }
+
+  async function onSubmit() {
+    if (!userId) {
+      setFormError("Selecciona el vendedor");
+      return;
+    }
+    const items = availableItems
+      .map((row) => {
+        const value = Number(quantities[row.product.id] ?? "");
+        return { productId: row.product.id, quantity: value };
+      })
+      .filter((i) => Number.isFinite(i.quantity) && i.quantity > 0);
+    if (items.length === 0) {
+      setFormError("Ingresa al menos una cantidad mayor a 0");
+      return;
+    }
+    setFormError(null);
+    setSaving(true);
+    try {
+      await apiFetch("/api/inventory/vendors", {
+        method: "POST",
+        body: JSON.stringify({ truckId: truck.id, userId: Number(userId), items }),
+      });
+      toast.success("Productos asignados al vendedor");
+      onSuccess();
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Error al asignar");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChangeWrapped}>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-xl">
+        <DialogHeader>
+          <DialogTitle>Asignar a vendedor</DialogTitle>
+          <DialogDescription>
+            Despacha mercancía del camión <span className="font-medium">{truck.name}</span> a un
+            vendedor.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label>Vendedor *</Label>
+            <Select value={userId} onValueChange={setUserId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecciona un vendedor" />
+              </SelectTrigger>
+              <SelectContent>
+                {vendors.map((vendor) => (
+                  <SelectItem key={vendor.id} value={String(vendor.id)}>
+                    {vendor.name}
+                    {vendor.contractNumber ? ` · ${vendor.contractNumber}` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {availableItems.length === 0 ? (
+            <p className="rounded-md border p-4 text-center text-sm text-muted-foreground">
+              Este camión no tiene productos disponibles para asignar.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              <Label>Productos a asignar</Label>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Producto</TableHead>
+                    <TableHead className="text-right">Disponible</TableHead>
+                    <TableHead className="w-28">Cantidad</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {availableItems.map((row) => (
+                    <TableRow key={row.product.id}>
+                      <TableCell className="font-medium">{row.product.name}</TableCell>
+                      <TableCell className="text-right">{row.quantity}</TableCell>
+                      <TableCell>
+                        <Input
+                          type="number"
+                          min={1}
+                          max={row.quantity}
+                          placeholder="0"
+                          value={quantities[row.product.id] ?? ""}
+                          onChange={(event) =>
+                            setQuantities((prev) => ({
+                              ...prev,
+                              [row.product.id]: event.target.value,
+                            }))
+                          }
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+
+          {formError && <p className="text-sm text-destructive">{formError}</p>}
+          <DialogFooter>
+            <Button onClick={onSubmit} disabled={saving || availableItems.length === 0}>
+              {saving ? "Asignando…" : "Asignar al vendedor"}
+            </Button>
+          </DialogFooter>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function TrucksClient({
   canCreate,
   canLoad,
+  canAssign,
 }: {
   canCreate: boolean;
   canLoad: boolean;
+  canAssign: boolean;
 }) {
   const queryClient = useQueryClient();
   const [formDialog, setFormDialog] = useState<{ open: boolean; truck?: TruckRow } | null>(null);
   const [loadDialog, setLoadDialog] = useState<TruckRow | null>(null);
+  const [assignDialog, setAssignDialog] = useState<TruckRow | null>(null);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["trucks"],
     queryFn: () => apiFetch<TruckRow[]>("/api/trucks"),
+  });
+
+  const { data: trucksWithStock } = useQuery({
+    queryKey: ["sales-trucks"],
+    queryFn: () => apiFetch<TruckWithStock[]>("/api/sales/trucks"),
+  });
+
+  const { data: vendorOptions } = useQuery({
+    queryKey: ["vendor-options"],
+    queryFn: () => apiFetch<VendorOption[]>("/api/inventory/vendors/options"),
   });
 
   const { data: users } = useQuery({
@@ -408,10 +583,15 @@ export function TrucksClient({
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-1">
+                      <div className="flex flex-wrap items-center justify-end gap-1">
                         {canLoad && (
                           <Button variant="outline" size="sm" onClick={() => setLoadDialog(truck)}>
                             <Boxes /> Cargar
+                          </Button>
+                        )}
+                        {canAssign && (
+                          <Button variant="outline" size="sm" onClick={() => setAssignDialog(truck)}>
+                            <UserCheck /> Asignar
                           </Button>
                         )}
                         <Button
@@ -461,10 +641,33 @@ export function TrucksClient({
             toast.success("Camión cargado");
             setLoadDialog(null);
             queryClient.invalidateQueries({ queryKey: ["trucks"] });
+            queryClient.invalidateQueries({ queryKey: ["sales-trucks"] });
             queryClient.invalidateQueries({ queryKey: ["inventory-stock"] });
           }}
         />
       )}
+
+      {assignDialog && (() => {
+        const truckWithStock = (trucksWithStock ?? []).find((t) => t.id === assignDialog.id);
+        if (!truckWithStock) return null;
+        return (
+          <AssignVendorDialog
+            open={true}
+            onOpenChange={(open) => {
+              if (!open) setAssignDialog(null);
+            }}
+            truck={truckWithStock}
+            vendors={vendorOptions ?? []}
+            onSuccess={() => {
+              setAssignDialog(null);
+              queryClient.invalidateQueries({ queryKey: ["sales-trucks"] });
+              queryClient.invalidateQueries({ queryKey: ["vendor-options"] });
+              queryClient.invalidateQueries({ queryKey: ["trucks"] });
+              queryClient.invalidateQueries({ queryKey: ["inventory-stock"] });
+            }}
+          />
+        );
+      })()}
     </div>
   );
 }
