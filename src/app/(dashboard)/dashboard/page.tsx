@@ -16,7 +16,9 @@ export default async function DashboardPage() {
   const session = await requireSession();
 
   if (!hasPermission(session, "dashboard.view")) {
-    if (session.permissions.includes("sales.view")) {
+    if (/camion|conductor/i.test(session.role.name)) {
+      redirect("/trucks");
+    } else if (session.permissions.includes("sales.view")) {
       redirect("/sales");
     } else if (session.permissions.includes("payments.view")) {
       redirect("/payments");

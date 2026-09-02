@@ -43,6 +43,13 @@ interface UserOption {
   id: number;
   name: string;
   active: boolean;
+  role: { id: number; name: string } | null;
+}
+
+function driverCandidates(users: UserOption[]): UserOption[] {
+  const active = users.filter((user) => user.active);
+  const camion = active.filter((user) => /camion|conductor/i.test(user.role?.name ?? ""));
+  return camion.length > 0 ? camion : active;
 }
 
 interface TruckRow {
@@ -325,7 +332,7 @@ interface VendorOption {
   inventory: { productId: number; quantity: number }[];
 }
 
-function AssignVendorDialog({
+export function AssignVendorDialog({
   open,
   onOpenChange,
   truck,
@@ -618,7 +625,7 @@ export function TrucksClient({
             if (!open) setFormDialog(null);
           }}
           truck={formDialog.truck}
-          users={(users ?? []).filter((user) => user.active)}
+          users={driverCandidates(users ?? [])}
           onSuccess={() => {
             toast.success(formDialog.truck ? "Camión actualizado" : "Camión creado");
             setFormDialog(null);

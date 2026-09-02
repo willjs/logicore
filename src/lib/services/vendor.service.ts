@@ -350,9 +350,16 @@ export async function returnVendorStock(
   });
 }
 
-export async function listVendorAssignments(companyId: number, opts: { userId?: number } = {}) {
+export async function listVendorAssignments(
+  companyId: number,
+  opts: { userId?: number; truckId?: number } = {},
+) {
   const assignments = await prisma.vendorAssignment.findMany({
-    where: { companyId, ...(opts.userId ? { userId: opts.userId } : {}) },
+    where: {
+      companyId,
+      ...(opts.userId ? { userId: opts.userId } : {}),
+      ...(opts.truckId ? { truckId: opts.truckId } : {}),
+    },
     orderBy: { assignmentDate: "desc" },
     include: {
       truck: { select: { id: true, name: true, plate: true } },

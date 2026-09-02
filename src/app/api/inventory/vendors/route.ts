@@ -1,4 +1,5 @@
 import { withApi, ApiError, ok } from "@/lib/api";
+import { prisma } from "@/lib/db";
 import { vendorAssignSchema } from "@/lib/validations";
 import { assignVendorStock, listVendorAssignments } from "@/lib/services/vendor.service";
 import { serialize } from "@/lib/serialize";
@@ -23,6 +24,19 @@ export const POST = withApi(
         400,
         "VALIDATION_ERROR",
       );
+    }
+    if (/camion|conductor/i.test(session.role.name)) {
+      const truck = await prisma.truck.findUnique({
+        where: { id: parsed.data.truckId },
+        select: { companyId: true, driverId: true },
+      });
+      if (
+        !truck ||
+        truck.companyId !== session.company.id ||
+        truck.driverId !== session.user.id
+      ) {
+        throw new ApiError("Solo puedes despachar desde tu camión", 403, "FORBIDDEN");
+      }
     }
     const assignment = await assignVendorStock(session.company.id, session.user.id, {
       truckId: parsed.data.truckId,

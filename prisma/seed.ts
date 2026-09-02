@@ -83,6 +83,13 @@ const DEFAULT_ROLES = [
       "customers.view", "payments.view", "payments.create",
     ],
   },
+  {
+    name: "CAMION",
+    description: "Encargado del camión. Despacha la mercancía del camión a los vendedores",
+    permissions: [
+      "trucks.view", "sales.create",
+    ],
+  },
 ];
 
 function createAdapter() {
@@ -170,6 +177,7 @@ async function main() {
     { name: "Supervisor Demo", email: "supervisor@erpbod.com", password: "Supervisor#2026", role: "SUPERVISOR" },
     { name: "Vendedor Demo", email: "vendedor@erpbod.com", password: "Vendedor#2026", role: "VENDEDOR" },
     { name: "Cobrador Demo", email: "cobrador@erpbod.com", password: "Cobrador#2026", role: "COBRADOR" },
+    { name: "Camionero Demo", email: "camion@erpbod.com", password: "Camion#2026", role: "CAMION" },
   ];
 
   console.log("Creando usuarios...");
