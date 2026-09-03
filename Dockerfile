@@ -39,6 +39,8 @@ COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/src/generated ./src/generated
 COPY --from=deps /app/prisma ./prisma
 COPY --from=prod-deps /app/node_modules ./node_modules
+COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
+COPY docker-entrypoint.sh ./docker-entrypoint.sh
 
 RUN mkdir -p /app/storage/uploads
 RUN chown -R nextjs:nodejs /app/storage /app/node_modules
@@ -49,4 +51,4 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["node", "server.js"]
+CMD ["/bin/sh", "./docker-entrypoint.sh"]

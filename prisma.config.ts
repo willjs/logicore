@@ -1,6 +1,5 @@
 // Prisma configuration (Prisma 7)
 import { defineConfig } from "prisma/config";
-import "dotenv/config";
 
 const dbUrl =
   process.env["DATABASE_URL"] ??
