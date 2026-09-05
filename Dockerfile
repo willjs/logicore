@@ -15,6 +15,7 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/src/generated ./src/generated
 COPY . .
+ENV NODE_OPTIONS="--max-old-space-size=1536"
 RUN npm run build
 
 # --- production deps ---
