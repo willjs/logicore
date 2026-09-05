@@ -42,8 +42,9 @@ next-env.d.ts
 
 /src/generated/prisma
 
-# uploads
-/storage/uploads
+# uploads (archivos subidos en runtime; persisten via volumen en Coolify)
+/storage/*
+!/storage/.gitkeep
 
 # logs
 *.log

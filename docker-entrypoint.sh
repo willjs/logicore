@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-if [ -n "$DATABASE_URL" ]; then
+if [ -n "$DATABASE_URL" ] || [ -n "$DB_HOST" ]; then
   echo "Running prisma db push..."
   npx --yes prisma@7.9.1 db push --schema prisma/schema.prisma || echo "db push failed but continuing"
 else
